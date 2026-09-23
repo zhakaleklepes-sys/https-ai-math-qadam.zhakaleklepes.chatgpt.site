@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
-type View = "home" | "setup" | "lesson" | "teacher" | "judge";
+type View = "home" | "setup" | "lesson" | "result" | "teacher" | "judge";
+type Result = { student:string; grade:string; correct:number; errors:number; score:number; level:string };
 type Task = {
   text: string;
   options: string[];
@@ -191,7 +192,7 @@ function generate(a: Analysis): Task[] {
 }
 export default function Home() {
   const [view, setView] = useState<View>("home"),
-    [name, setName] = useState("Аружан"),
+    [name, setName] = useState(students[0]),
     [grade, setGrade] = useState("2-сынып"),
     [topic, setTopic] = useState(topics["2-сынып"][0]),
     [index, setIndex] = useState(0),
@@ -199,6 +200,7 @@ export default function Home() {
     [phase, setPhase] = useState<"idle" | "wrong" | "hint" | "correct">("idle"),
     [correct, setCorrect] = useState(0),
     [errors, setErrors] = useState(0),
+    [result, setResult] = useState<Result | null>(null),
     [prompt, setPrompt] = useState(
       "2-сынып оқушыларына көбейту тақырыбы бойынша функционалдық сауаттылыққа арналған 5 деңгейлік тапсырма құрастыр. Қате жауапты талдап, түзету тапсырмасын бер.",
     ),
@@ -207,7 +209,7 @@ export default function Home() {
     [ji, setJi] = useState(0),
     [ja, setJa] = useState(""),
     [jp, setJp] = useState<"idle" | "wrong" | "correct">("idle");
-  const task = bank[grade][index % bank[grade].length],
+  const task = bank[grade][Math.min(index, bank[grade].length - 1)],
     score = Math.round((correct / Math.max(1, correct + errors)) * 100),
     jt = made[ji];
   const check = () => {
@@ -217,6 +219,22 @@ export default function Home() {
     } else {
       setPhase("wrong");
       setErrors((x) => x + 1);
+    }
+  };
+  const startLesson = () => {
+    setIndex(0); setCorrect(0); setErrors(0); setSelected(""); setPhase("idle"); setResult(null); setView("lesson");
+  };
+  const finishOrNext = () => {
+    const total = bank[grade].length;
+    if (index + 1 >= total) {
+      const finalCorrect = correct;
+      const finalScore = Math.round((finalCorrect / Math.max(1, finalCorrect + errors)) * 100);
+      const summary:Result = { student:name, grade, correct:finalCorrect, errors, score:finalScore, level:finalScore >= 85 ? "Жоғары" : finalScore >= 60 ? "Орта" : "Бастапқы" };
+      setResult(summary);
+      localStorage.setItem(`ai-math-qadam:${name}`, JSON.stringify(summary));
+      setView("result");
+    } else {
+      setIndex((x) => x + 1); setSelected(""); setPhase("idle");
     }
   };
   return (
@@ -343,8 +361,10 @@ export default function Home() {
             <small className="steps">ОҚУШЫ ПРОФИЛІ</small>
             <h2>Танысайық! 👋</h2>
             <p>Саған сәйкес тапсырмалар дайындаймыз.</p>
-            <label>Атың кім?</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} />
+            <label>Оқушыны таңда</label>
+            <select value={name} onChange={(e) => setName(e.target.value)}>
+              {students.map((student) => <option key={student} value={student}>{student}</option>)}
+            </select>
             <label>Сыныбың</label>
             <div className="grades">
               {Object.keys(topics).map((g) => (
@@ -378,7 +398,7 @@ export default function Home() {
             >
               ✦ AI маған тақырып таңдасын
             </button>
-            <button className="start" onClick={() => setView("lesson")}>
+            <button className="start" onClick={startLesson}>
               Диагностиканы бастау <b>→</b>
             </button>
           </div>
@@ -417,10 +437,10 @@ export default function Home() {
             <div className="progress">
               <div>
                 <b>{index + 1}-тапсырма</b>
-                <small>Прогресс: {score}%</small>
+                <small>{index + 1} / {bank[grade].length} · Нәтиже: {score}%</small>
               </div>
               <i>
-                <b style={{ width: `${Math.min(100, (index + 1) * 20)}%` }} />
+                <b style={{ width: `${((index + 1) / bank[grade].length) * 100}%` }} />
               </i>
             </div>
             <article className="question">
@@ -443,7 +463,7 @@ export default function Home() {
               </div>
               <button
                 className="check-wide"
-                disabled={!selected}
+                disabled={!selected || phase === "correct"}
                 onClick={check}
               >
                 Жауапты тексеру
@@ -486,13 +506,9 @@ export default function Home() {
                     <b>Жарайсың, {name}!</b>
                     <p>{task.skill} дағдысы оқу картаңа қосылды.</p>
                     <button
-                      onClick={() => {
-                        setIndex((x) => x + 1);
-                        setSelected("");
-                        setPhase("idle");
-                      }}
+                      onClick={finishOrNext}
                     >
-                      Келесі бейімделген тапсырма →
+                      {index + 1 >= bank[grade].length ? "Нәтижені көру →" : "Келесі қайталанбайтын тапсырма →"}
                     </button>
                   </span>
                 </div>
@@ -516,6 +532,24 @@ export default function Home() {
                 <b>{errors > correct ? "Түзету жұмысы" : "Күрделі тапсырма"}</b>
               </div>
             </div>
+          </div>
+        </section>
+      )}
+      {view === "result" && result && (
+        <section className="result-page">
+          <div className="result-card">
+            <div className="result-badge">✓</div>
+            <small>ЖЕКЕ ОҚУ НӘТИЖЕСІ</small>
+            <h2>{result.student}</h2>
+            <p>{result.grade} тапсырмалары толық аяқталды. Бұл оқу сессиясында бірде-бір тапсырма қайталанған жоқ.</p>
+            <div className="result-score"><b>{result.score}%</b><span>Қорытынды нәтиже</span></div>
+            <div className="result-grid">
+              <div><small>ДҰРЫС ЖАУАП</small><b>{result.correct}</b></div>
+              <div><small>ҚАТЕ ӘРЕКЕТ</small><b>{result.errors}</b></div>
+              <div><small>БІЛІМ ДЕҢГЕЙІ</small><b>{result.level}</b></div>
+              <div><small>КЕЛЕСІ ҚАДАМ</small><b>{result.score >= 85 ? "Келесі деңгей" : "Түзету жұмысы"}</b></div>
+            </div>
+            <div className="result-actions"><button onClick={() => setView("setup")}>Басқа оқушыны таңдау</button><button className="primary-result" onClick={startLesson}>Қайта бастау</button></div>
           </div>
         </section>
       )}
