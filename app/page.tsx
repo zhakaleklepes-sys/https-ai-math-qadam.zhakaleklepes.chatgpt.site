@@ -32,12 +32,10 @@ const topics: Record<string, string[]> = {
   "2-сынып": [
     "Ондық және бірлік",
     "Қосу және азайту",
-    "Көбейтуге кіріспе",
     "Ақша және уақыт",
     "Мәтін есептер",
   ],
   "3-сынып": [
-    "Көбейту және бөлу",
     "Мәтін есептер",
     "Қозғалыс",
     "Кестемен жұмыс",
@@ -201,6 +199,7 @@ export default function Home() {
     [correct, setCorrect] = useState(0),
     [errors, setErrors] = useState(0),
     [result, setResult] = useState<Result | null>(null),
+    [classResults, setClassResults] = useState<(Result | null)[]>(students.map(() => null)),
     [prompt, setPrompt] = useState(
       "2-сынып оқушыларына көбейту тақырыбы бойынша функционалдық сауаттылыққа арналған 5 деңгейлік тапсырма құрастыр. Қате жауапты талдап, түзету тапсырмасын бер.",
     ),
@@ -209,9 +208,17 @@ export default function Home() {
     [ji, setJi] = useState(0),
     [ja, setJa] = useState(""),
     [jp, setJp] = useState<"idle" | "wrong" | "correct">("idle");
-  const task = bank[grade][Math.min(index, bank[grade].length - 1)],
+  const activeTasks = bank[grade].filter((item) => !/[×:]|көбейту|бөлу/i.test(`${item.text} ${item.skill}`));
+  const task = activeTasks[Math.min(index, activeTasks.length - 1)],
     score = Math.round((correct / Math.max(1, correct + errors)) * 100),
     jt = made[ji];
+  const completedResults = classResults.filter((item): item is Result => item !== null);
+  const averageScore = completedResults.length ? Math.round(completedResults.reduce((sum, item) => sum + item.score, 0) / completedResults.length) : 0;
+  const levelCounts = {
+    high: completedResults.filter((item) => item.level === "Жоғары").length,
+    middle: completedResults.filter((item) => item.level === "Орта").length,
+    start: completedResults.filter((item) => item.level === "Бастапқы").length,
+  };
   const check = () => {
     if (selected === task.answer) {
       setPhase("correct");
@@ -225,7 +232,7 @@ export default function Home() {
     setIndex(0); setCorrect(0); setErrors(0); setSelected(""); setPhase("idle"); setResult(null); setView("lesson");
   };
   const finishOrNext = () => {
-    const total = bank[grade].length;
+    const total = activeTasks.length;
     if (index + 1 >= total) {
       const finalCorrect = correct;
       const finalScore = Math.round((finalCorrect / Math.max(1, finalCorrect + errors)) * 100);
@@ -236,6 +243,13 @@ export default function Home() {
     } else {
       setIndex((x) => x + 1); setSelected(""); setPhase("idle");
     }
+  };
+  const openTeacher = () => {
+    setClassResults(students.map((student) => {
+      const saved = localStorage.getItem(`ai-math-qadam:${student}`);
+      return saved ? JSON.parse(saved) as Result : null;
+    }));
+    setView("teacher");
   };
   return (
     <main>
@@ -275,7 +289,7 @@ export default function Home() {
                 </span>
                 <b>→</b>
               </button>
-              <button onClick={() => setView("teacher")}>
+              <button onClick={openTeacher}>
                 <i>▤</i>
                 <span>
                   ПЕДАГОГ<small>Сыныпты басқару</small>
@@ -362,9 +376,9 @@ export default function Home() {
             <h2>Танысайық! 👋</h2>
             <p>Саған сәйкес тапсырмалар дайындаймыз.</p>
             <label>Оқушыны таңда</label>
-            <select value={name} onChange={(e) => setName(e.target.value)}>
-              {students.map((student) => <option key={student} value={student}>{student}</option>)}
-            </select>
+            <div className="student-picker">
+              {students.map((student, i) => <button key={student} className={name === student ? "active" : ""} onClick={() => setName(student)}><i>{i + 1}</i>{student}</button>)}
+            </div>
             <label>Сыныбың</label>
             <div className="grades">
               {Object.keys(topics).map((g) => (
@@ -437,10 +451,10 @@ export default function Home() {
             <div className="progress">
               <div>
                 <b>{index + 1}-тапсырма</b>
-                <small>{index + 1} / {bank[grade].length} · Нәтиже: {score}%</small>
+                <small>{index + 1} / {activeTasks.length} · Нәтиже: {score}%</small>
               </div>
               <i>
-                <b style={{ width: `${((index + 1) / bank[grade].length) * 100}%` }} />
+                <b style={{ width: `${((index + 1) / activeTasks.length) * 100}%` }} />
               </i>
             </div>
             <article className="question">
@@ -508,7 +522,7 @@ export default function Home() {
                     <button
                       onClick={finishOrNext}
                     >
-                      {index + 1 >= bank[grade].length ? "Нәтижені көру →" : "Келесі қайталанбайтын тапсырма →"}
+                      {index + 1 >= activeTasks.length ? "Нәтижені көру →" : "Келесі қайталанбайтын тапсырма →"}
                     </button>
                   </span>
                 </div>
@@ -771,10 +785,10 @@ export default function Home() {
             </div>
             <div className="stats">
               {[
-                ["♙", "Оқушылар", "24", "20 белсенді"],
-                ["✓", "Орташа нәтиже", "78%", "↑ 8% осы аптада"],
-                ["!", "Назар қажет", "4", "қолдау керек"],
-                ["✦", "Орындалды", "126", "тапсырма"],
+                ["♙", "Оқушылар", `${students.length}`, `${completedResults.length} аяқтады`],
+                ["✓", "Орташа нәтиже", `${averageScore}%`, "сынып нәтижесі"],
+                ["!", "Назар қажет", `${levelCounts.start}`, "бастапқы деңгей"],
+                ["✦", "Орындалды", `${completedResults.length}`, "оқу сессиясы"],
               ].map((x, i) => (
                 <div key={x[1]}>
                   <i className={`c${i}`}>{x[0]}</i>
@@ -790,20 +804,21 @@ export default function Home() {
               <article className="panel">
                 <div className="panel-head">
                   <span>
-                    <b>Сынып прогресі</b>
-                    <small>Диагностика → қорытынды</small>
+                    <b>Сынып оқушыларын салыстыру</b>
+                    <small>Әр оқушының соңғы нәтижесі</small>
                   </span>
-                  <em>+23% ↗</em>
+                  <em>{completedResults.length} нәтиже</em>
                 </div>
-                <div className="chart">
-                  {[55, 64, 70, 78, 88].map((n, i) => (
-                    <div key={n}>
-                      <i style={{ height: `${n}%` }}>
-                        <b>{n}%</b>
+                <div className="class-chart">
+                  {students.map((student, i) => {
+                    const item = classResults[i];
+                    return <div key={student} title={`${student}: ${item?.score ?? 0}%`}>
+                      <i className={item?.level === "Жоғары" ? "high" : item?.level === "Орта" ? "middle" : "start"} style={{ height: `${Math.max(3, item?.score ?? 0)}%` }}>
+                        <b>{item?.score ?? 0}%</b>
                       </i>
-                      <span>{i + 1}-кезең</span>
-                    </div>
-                  ))}
+                      <span>{student.split(" ")[0]}</span>
+                    </div>;
+                  })}
                 </div>
               </article>
               <article className="panel ai-panel">
@@ -829,13 +844,22 @@ export default function Home() {
                 <button>Түзету тапсырмасын құру →</button>
               </article>
             </div>
+            <article className="panel level-distribution">
+              <div className="panel-head"><span><b>Деңгей бойынша бөлініс</b><small>Нақты аяқталған нәтижелер</small></span></div>
+              <div className="level-cards">
+                <div className="high"><i>●</i><span><b>Жоғары деңгей</b><small>85–100%</small></span><strong>{levelCounts.high}</strong></div>
+                <div className="middle"><i>●</i><span><b>Орта деңгей</b><small>60–84%</small></span><strong>{levelCounts.middle}</strong></div>
+                <div className="start"><i>●</i><span><b>Бастапқы деңгей</b><small>0–59%</small></span><strong>{levelCounts.start}</strong></div>
+                <div><i>○</i><span><b>Әлі орындамаған</b><small>Нәтиже жоқ</small></span><strong>{students.length - completedResults.length}</strong></div>
+              </div>
+            </article>
             <article className="panel student-roster">
               <div className="panel-head">
                 <span><b>ОҚУШЫЛАР</b><small>2 «А» сыныбы · {students.length} оқушы</small></span>
               </div>
               <div className="roster-grid">
                 {students.map((student, i) => (
-                  <div key={student}><i>{i + 1}</i><span>{student}</span></div>
+                  <div key={student}><i>{i + 1}</i><span>{student}<small>{classResults[i] ? `${classResults[i]?.score}% · ${classResults[i]?.level}` : "Әлі орындамаған"}</small></span></div>
                 ))}
               </div>
             </article>
