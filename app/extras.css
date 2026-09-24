@@ -1,0 +1,4 @@
+.fixed-grade{height:46px;border:1px solid #bdd2f4;background:#edf4ff;color:#155eef;border-radius:11px;display:flex;align-items:center;padding:0 14px;font-size:13px;font-weight:900}
+.instant-note{text-align:center;color:#74839a;font-size:11px;margin:8px 0}
+.option-grid button.correct-option{border-color:#18a976;background:#e8f8f1;color:#117653}
+.option-grid button.wrong-option{border-color:#e45757;background:#fff0f0;color:#b93636}
