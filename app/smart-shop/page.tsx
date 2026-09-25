@@ -1,0 +1,87 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+type Screen = "home" | "shop" | "task1" | "task2" | "task3" | "result" | "teacher";
+type RecordData = { name: string; grade: string; correct: number; mistakes: number; help: number[] };
+
+const products = [["🥛", "Сүт", 240], ["🍞", "Нан", 160], ["🍎", "Алма", 180], ["🧃", "Шырын", 320], ["🍪", "Печенье", 210], ["✏️", "Қарындаш", 90]] as const;
+const hints = [
+  ["Бағаларды қайта қара.", "Қосу амалын қолдан: 240 + 160 + 180.", "240 + 160 = 400. Енді алманың бағасын қос."],
+  ["Алдымен екі заттың жалпы құнын есепте.", "Алдымен 320 + 210, содан кейін 1000-нан азайт.", "320 + 210 = 530. Енді 1000 теңгеден 530 теңгені азайт."],
+  ["Әр жұптың бағаларын қайта қара.", "Екі бағаны қосып, 500-мен салыстыр.", "A: 240 + 320; B: 160 + 210; C: 180 + 320. 500-ден аспайтын нұсқаны тап."],
+];
+
+export default function SmartShop() {
+  const [screen, setScreen] = useState<Screen>("home");
+  const [name, setName] = useState("Аружан");
+  const [grade, setGrade] = useState("3-сынып");
+  const [answers, setAnswers] = useState(["", "", ""]);
+  const [reason, setReason] = useState("");
+  const [correct, setCorrect] = useState([false, false, false]);
+  const [mistakes, setMistakes] = useState([0, 0, 0]);
+  const [help, setHelp] = useState([0, 0, 0]);
+  const [feedback, setFeedback] = useState("");
+  const [teacherCode, setTeacherCode] = useState("");
+  const [teacherError, setTeacherError] = useState("");
+  const [records, setRecords] = useState<RecordData[]>([]);
+
+  useEffect(() => {
+    const raw = localStorage.getItem("smart-shop-records");
+    if (raw) setRecords(JSON.parse(raw));
+    const saved = localStorage.getItem("smart-shop-session");
+    if (saved) {
+      const s = JSON.parse(saved);
+      setName(s.name || "Аружан"); setGrade(s.grade || "3-сынып");
+      setAnswers(s.answers || ["", "", ""]); setReason(s.reason || "");
+      setCorrect(s.correct || [false, false, false]); setMistakes(s.mistakes || [0, 0, 0]); setHelp(s.help || [0, 0, 0]);
+    }
+  }, []);
+  useEffect(() => {
+    localStorage.setItem("smart-shop-session", JSON.stringify({ name, grade, answers, reason, correct, mistakes, help }));
+  }, [name, grade, answers, reason, correct, mistakes, help]);
+
+  const progress = correct.filter(Boolean).length;
+  const updateAnswer = (i: number, value: string) => setAnswers((a) => a.map((x, n) => n === i ? value : x));
+  const addMistake = (i: number) => setMistakes((a) => a.map((x, n) => n === i ? x + 1 : x));
+  const useHelp = (i: number) => {
+    setHelp((a) => a.map((x, n) => n === i ? Math.min(3, x + 1) : x));
+    setFeedback(hints[i][Math.min(2, help[i])]);
+  };
+  const pass = (i: number, message: string, next: Screen) => {
+    setCorrect((a) => a.map((x, n) => n === i ? true : x)); setFeedback(message);
+    setTimeout(() => { setFeedback(""); setScreen(next); }, 850);
+  };
+  const check1 = () => Number(answers[0]) === 580 ? pass(0, "✅ Дұрыс! Жақсы есептедің!", "task2") : (addMistake(0), setFeedback(mistakes[0] >= 1 ? hints[0][2] : "Бағаларды тағы бір рет қосып көр."));
+  const check2 = () => Number(answers[1]) === 470 ? pass(1, "✅ Дұрыс! Қайтарымды таптың!", "task3") : (addMistake(1), setFeedback(mistakes[1] >= 1 ? hints[1][2] : hints[1][0]));
+  const check3 = () => {
+    if ((answers[2] === "B" || answers[2] === "C") && reason.trim().length >= 8) {
+      const next = [...correct]; next[2] = true; setCorrect(next); setFeedback("✅ Дұрыс! Бюджетке сай таңдау жасадың!");
+      const rec = { name, grade, correct: next.filter(Boolean).length, mistakes: mistakes.reduce((a, b) => a + b, 0), help };
+      const list = [...records.filter((r) => r.name !== name), rec]; setRecords(list); localStorage.setItem("smart-shop-records", JSON.stringify(list));
+      setTimeout(() => { setFeedback(""); setScreen("result"); }, 900);
+    } else {
+      addMistake(2);
+      setFeedback(!answers[2] ? "Алдымен B немесе C нұсқасын таңда." : reason.trim().length < 8 ? "Неліктен таңдағаныңды бір сөйлеммен түсіндір." : hints[2][1]);
+    }
+  };
+  const restart = () => { setAnswers(["", "", ""]); setReason(""); setCorrect([false, false, false]); setMistakes([0, 0, 0]); setHelp([0, 0, 0]); setFeedback(""); setScreen("home"); };
+  const openTeacher = () => {
+    if (teacherCode === "211") { const raw = localStorage.getItem("smart-shop-records"); setRecords(raw ? JSON.parse(raw) : []); setTeacherError(""); (document.getElementById("smart-teacher-dialog") as HTMLDialogElement)?.close(); setScreen("teacher"); }
+    else setTeacherError("Код дұрыс емес");
+  };
+  const Header = () => <header className="ss-header"><button className="ss-back" onClick={() => location.assign("/")}>← AI-MATH QADAM</button><button className="ss-logo" onClick={() => setScreen("home")}><span>🛒</span><b>Ақылды дүкен</b></button><div className="ss-money">💰 Сенің ақшаң: <b>1000 ₸</b></div></header>;
+  const Progress = () => <div className="ss-progress"><div>{[1, 2, 3].map((n) => <span key={n} className={progress >= n ? "done" : screen === `task${n}` ? "active" : ""}>{progress >= n ? "✓" : n}</span>)}</div><p>{progress}/3 тапсырма орындалды</p></div>;
+  const Help = ({ i }: { i: number }) => <div className="ss-help"><button onClick={() => useHelp(i)}>💡 Көмек {help[i] ? `(${help[i]}/3)` : ""}</button>{feedback && <div className={feedback.startsWith("✅") ? "ss-feedback good" : "ss-feedback"}>{feedback}</div>}</div>;
+
+  return <main className="smart-shop"><Header />
+    {screen === "home" && <section className="ss-hero"><div className="ss-art">🛍️</div><div className="ss-copy"><small>3-СЫНЫП · МАТЕМАТИКА ЖӘНЕ ОҚУ САУАТТЫЛЫҒЫ</small><h1>🛒 Ақылды дүкендегі <em>үш таңдау</em></h1><p>Ақшаны дұрыс есепте. Үш тапсырманы орында. Ақылды сатып алушы бол!</p><div className="ss-login"><label>Атың</label><input value={name} onChange={(e) => setName(e.target.value)} placeholder="Атыңды жаз" /><label>Сыныбың</label><select value={grade} onChange={(e) => setGrade(e.target.value)}><option>3-сынып</option></select><button onClick={() => setScreen("shop")} disabled={!name.trim()}>БАСТАУ →</button></div><button className="ss-teacher-link" onClick={() => { setTeacherCode(""); setTeacherError(""); (document.getElementById("smart-teacher-dialog") as HTMLDialogElement)?.showModal(); }}>🔐 Мұғалім бөлімі</button></div></section>}
+    {screen === "shop" && <section className="ss-shop"><div className="ss-title"><small>1-ҚАДАМ</small><h2>🛒 Ақылды дүкен</h2><p>Тауарлардың атауы мен бағасын мұқият қарап ал.</p></div><div className="ss-shelf">{products.map(([icon, title, price]) => <article key={title}><div>{icon}</div><h3>{title}</h3><b>{price} ₸</b></article>)}</div><div className="ss-note">💰 Барлық есептеулер 1000 теңге көлемінде орындалады.</div><button className="ss-next" onClick={() => setScreen("task1")}>1-ТАПСЫРМАҒА ӨТУ →</button></section>}
+    {screen === "task1" && <section className="ss-task-page"><Progress /><article className="ss-task"><div className="ss-tag">1-ТАПСЫРМА · ЖАЛПЫ ҚҰН</div><h2>Айдана барлығы неше теңге төледі?</h2><div className="ss-products"><span>🥛 <b>Сүт</b><em>240 ₸</em></span><i>+</i><span>🍞 <b>Нан</b><em>160 ₸</em></span><i>+</i><span>🍎 <b>Алма</b><em>180 ₸</em></span></div><label>Жауабың</label><div className="ss-answer"><input type="number" value={answers[0]} onChange={(e) => updateAnswer(0, e.target.value)} placeholder="0" /><span>₸</span><button onClick={check1}>ТЕКСЕРУ</button></div><Help i={0} /></article></section>}
+    {screen === "task2" && <section className="ss-task-page"><Progress /><article className="ss-task"><div className="ss-tag orange">2-ТАПСЫРМА · ҚАЙТАРЫМ</div><h2>Әли қанша теңге қайтарым алады?</h2><div className="ss-products"><span>🧃 <b>Шырын</b><em>320 ₸</em></span><i>+</i><span>🍪 <b>Печенье</b><em>210 ₸</em></span></div><div className="ss-paid">💵 Сатушыға берді: <b>1000 ₸</b></div><label>Қайтарым</label><div className="ss-answer"><input type="number" value={answers[1]} onChange={(e) => updateAnswer(1, e.target.value)} placeholder="0" /><span>₸</span><button onClick={check2}>ТЕКСЕРУ</button></div><Help i={1} /></article></section>}
+    {screen === "task3" && <section className="ss-task-page"><Progress /><article className="ss-task wide"><div className="ss-tag green">3-ТАПСЫРМА · АҚЫЛДЫ ТАҢДАУ</div><h2>Даниярда 500 ₸ бар. Қай нұсқа бюджеттен аспайды?</h2><p className="ss-multi">Бірнеше дұрыс жауап болуы мүмкін.</p><div className="ss-choices">{[["A", "🥛 Сүт 240 ₸", "🧃 Шырын 320 ₸"], ["B", "🍞 Нан 160 ₸", "🍪 Печенье 210 ₸"], ["C", "🍎 Алма 180 ₸", "🧃 Шырын 320 ₸"]].map((c) => <button key={c[0]} className={answers[2] === c[0] ? "selected" : ""} onClick={() => updateAnswer(2, c[0])}><strong>{c[0]}</strong><span>{c[1]}</span><i>+</i><span>{c[2]}</span></button>)}</div><label>Неліктен осы нұсқаны таңдадың?</label><textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Мысалы: Жалпы құны 370 ₸. 500 ₸ ақшам жетеді." /><button className="ss-submit" onClick={check3}>ЖАУАПТЫ ТЕКСЕРУ</button><Help i={2} /></article></section>}
+    {screen === "result" && <section className="ss-result"><article><div className="ss-trophy">🏆</div><small>🌟 НӘТИЖЕ</small><h2>{name}</h2><p>3 тапсырманың {progress}-еуін орындады.</p><div className="ss-score"><b>{Math.round(progress / 3 * 100)}%</b><span>өте жақсы!</span></div><ul><li>✅ Жалпы құнды есептей алады.</li><li>✅ Қайтарымды таба алады.</li><li>✅ Бюджетке сәйкес сатып алуды таңдай алады.</li></ul><div className="ss-award">🏆 АҚЫЛДЫ САТЫП АЛУШЫ</div><button onClick={restart}>ҚАЙТА БАСТАУ</button></article></section>}
+    {screen === "teacher" && <section className="ss-teacher"><div className="ss-teacher-head"><div><small>🔐 МҰҒАЛІМ ПАНЕЛІ</small><h2>Оқушылар нәтижесі</h2></div><button onClick={() => setScreen("home")}>← Шығу</button></div><div className="ss-key"><h3>Жауап кілті</h3><span><b>1</b> 580 ₸</span><span><b>2</b> 470 ₸</span><span><b>3</b> B = 370 ₸ және C = 500 ₸</span></div><div className="ss-records"><div className="ss-row labels"><span>ОҚУШЫ</span><span>СЫНЫП</span><span>НӘТИЖЕ</span><span>ҚАТЕ</span><span>КӨМЕК</span></div>{records.length ? records.map((r) => <div className="ss-row" key={r.name}><span><b>{r.name}</b></span><span>{r.grade}</span><span>{r.correct}/3</span><span>{r.mistakes}</span><span>{r.help.map((h, i) => h ? `${i + 1}-тап: ${h}` : null).filter(Boolean).join(", ") || "Қолданбады"}</span></div>) : <p className="ss-empty">Әзірге сақталған нәтиже жоқ.</p>}</div></section>}
+    <dialog id="smart-teacher-dialog" className="ss-dialog"><form method="dialog"><button className="ss-close">×</button><div>🔐</div><h3>Мұғалім бөлімі</h3><p>Арнайы кодты енгізіңіз</p><input type="password" value={teacherCode} onChange={(e) => setTeacherCode(e.target.value)} placeholder="Код" /><button type="button" onClick={openTeacher}>КІРУ</button>{teacherError && <small>{teacherError}</small>}</form></dialog>
+  </main>;
+}

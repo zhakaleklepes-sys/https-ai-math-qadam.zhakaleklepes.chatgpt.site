@@ -379,7 +379,7 @@ const bank: Record<string, Task[]> = {
 };
 function analyze(p: string): Analysis {
   const l = p.toLowerCase(),
-    grade = "2-сынып";
+    grade = l.includes("3-сынып") || l.includes("3 сынып") ? "3-сынып" : "2-сынып";
   const topic = l.includes("көбей")
     ? "Көбейту"
     : l.includes("бөлшек")
@@ -976,6 +976,15 @@ export default function Home() {
                 >
                   2-сынып · Ақша
                 </button>
+                <button
+                  onClick={() =>
+                    setPrompt(
+                      "3-сынып оқушыларына ақша, сатып алу құны және қайтарымды есептеу тақырыбынан «Ақылды дүкендегі үш таңдау» интерактивті цифрлық оқу платформасын құрастыр.",
+                    )
+                  }
+                >
+                  🛒 3-сынып · Ақылды дүкен
+                </button>
               </div>
               <button
                 className="analyze-btn"
@@ -1024,6 +1033,10 @@ export default function Home() {
                 <button
                   className="create-resource"
                   onClick={() => {
+                    if (prompt.toLowerCase().includes("ақылды дүкен")) {
+                      window.location.assign("/smart-shop");
+                      return;
+                    }
                     setMade(generate(analysis));
                     setJi(0);
                     setJa("");
